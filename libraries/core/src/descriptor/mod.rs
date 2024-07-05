@@ -4,7 +4,7 @@ use crate::config::{
 use eyre::{bail, eyre, Context, OptionExt, Result};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_with_expand_env::with_expand_envs;
+// use serde_with_expand_env::with_expand_envs;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     env::consts::EXE_EXTENSION,
@@ -491,8 +491,8 @@ pub fn resolve_path(source: &str, working_dir: &Path) -> Result<PathBuf> {
     if let Ok(abs_path) = working_dir.join(&path).canonicalize() {
         Ok(abs_path)
     // Search path within $PATH
-    } else if let Ok(abs_path) = which::which(&path) {
-        Ok(abs_path)
+    // } else if let Ok(abs_path) = which::which(&path) {
+    //     Ok(abs_path)
     } else {
         bail!("Could not find source path {}", path.display())
     }
@@ -541,11 +541,11 @@ pub struct CustomNode {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum EnvValue {
-    #[serde(deserialize_with = "with_expand_envs")]
+    // #[serde(deserialize_with = "with_expand_envs")]
     Bool(bool),
-    #[serde(deserialize_with = "with_expand_envs")]
+    // #[serde(deserialize_with = "with_expand_envs")]
     Integer(u64),
-    #[serde(deserialize_with = "with_expand_envs")]
+    // #[serde(deserialize_with = "with_expand_envs")]
     String(String),
 }
 

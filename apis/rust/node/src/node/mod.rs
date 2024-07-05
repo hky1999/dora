@@ -16,7 +16,7 @@ use dora_core::{
 };
 
 use eyre::{bail, WrapErr};
-use shared_memory_extended::{Shmem, ShmemConf};
+// use shared_memory_extended::{Shmem, ShmemConf};
 use std::{
     collections::{HashMap, VecDeque},
     ops::{Deref, DerefMut},
@@ -62,6 +62,27 @@ impl DoraNode {
             let raw = std::env::var("DORA_NODE_CONFIG").wrap_err(
                 "env variable DORA_NODE_CONFIG must be set. Are you sure your using `dora start`?",
             )?;
+            serde_yaml::from_str(&raw).context("failed to deserialize operator config")?
+        };
+        #[cfg(feature = "tracing")]
+        set_up_tracing(&node_config.node_id.to_string())
+            .context("failed to set up tracing subscriber")?;
+        Self::init(node_config)
+    }
+
+    /// Initiate a node from a specified file.
+    ///
+    /// ```no_run
+    /// use dora_node_api::DoraNode;
+    ///
+    ///
+    /// let (mut node, mut events) = DoraNode::init_from_file(file_path).expect("Could not init node.");
+    /// ```
+    ///
+    pub fn init_from_file(file_path: &str) -> eyre::Result<(Self, EventStream)> {
+        println!("DoraNode init from file {}", file_path);
+        let node_config: NodeConfig = {
+            let raw = std::fs::read_to_string(file_path).expect("failed to read from file");
             serde_yaml::from_str(&raw).context("failed to deserialize operator config")?
         };
         #[cfg(feature = "tracing")]
@@ -331,13 +352,14 @@ impl DoraNode {
                 // we know that this index exists, so we can safely unwrap here
                 self.cache.remove(i).unwrap()
             }
-            None => ShmemHandle(Box::new(
-                ShmemConf::new()
-                    .size(data_len)
-                    .writable(true)
-                    .create()
-                    .wrap_err("failed to allocate shared memory")?,
-            )),
+            // None => ShmemHandle(Box::new(
+            //     ShmemConf::new()
+            //         .size(data_len)
+            //         .writable(true)
+            //         .create()
+            //         .wrap_err("failed to allocate shared memory")?,
+            // )),
+            None => ShmemHandle(Box::new([0 as u8; 8])),
         };
         assert!(memory.len() >= data_len);
 
@@ -438,16 +460,17 @@ pub struct DataSample {
 impl DataSample {
     fn finalize(self) -> (Option<DataMessage>, Option<(ShmemHandle, DropToken)>) {
         match self.inner {
-            DataSampleInner::Shmem(shared_memory) => {
-                let drop_token = DropToken::generate();
-                let data = DataMessage::SharedMemory {
-                    shared_memory_id: shared_memory.get_os_id().to_owned(),
-                    len: self.len,
-                    drop_token,
-                };
-                (Some(data), Some((shared_memory, drop_token)))
-            }
+            // DataSampleInner::Shmem(shared_memory) => {
+            //     let drop_token = DropToken::generate();
+            //     let data = DataMessage::SharedMemory {
+            //         shared_memory_id: shared_memory.get_os_id().to_owned(),
+            //         len: self.len,
+            //         drop_token,
+            //     };
+            //     (Some(data), Some((shared_memory, drop_token)))
+            // }
             DataSampleInner::Vec(buffer) => (Some(DataMessage::Vec(buffer)), None),
+            _ => unimplemented!(),
         }
     }
 }
@@ -457,8 +480,9 @@ impl Deref for DataSample {
 
     fn deref(&self) -> &Self::Target {
         let slice = match &self.inner {
-            DataSampleInner::Shmem(handle) => unsafe { handle.as_slice() },
+            // DataSampleInner::Shmem(handle) => unsafe { handle },
             DataSampleInner::Vec(data) => data,
+            _ => unimplemented!(),
         };
         &slice[..self.len]
     }
@@ -467,8 +491,9 @@ impl Deref for DataSample {
 impl DerefMut for DataSample {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let slice = match &mut self.inner {
-            DataSampleInner::Shmem(handle) => unsafe { handle.as_slice_mut() },
+            // DataSampleInner::Shmem(handle) => unsafe { handle.as_mut() },
             DataSampleInner::Vec(data) => data,
+            _ => unimplemented!(),
         };
         &mut slice[..self.len]
     }
@@ -501,10 +526,11 @@ enum DataSampleInner {
     Vec(AVec<u8, ConstAlign<128>>),
 }
 
-struct ShmemHandle(Box<Shmem>);
+struct ShmemHandle(Box<[u8]>);
 
 impl Deref for ShmemHandle {
-    type Target = Shmem;
+    // type Target = Shmem;
+    type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
         &self.0

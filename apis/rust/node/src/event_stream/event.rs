@@ -7,7 +7,7 @@ use dora_core::{
     message::{ArrowTypeInfo, BufferOffset, Metadata},
 };
 use eyre::{Context, Result};
-use shared_memory_extended::{Shmem, ShmemConf};
+// use shared_memory_extended::{Shmem, ShmemConf};
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -99,20 +99,25 @@ impl std::fmt::Debug for RawData {
 }
 
 pub struct MappedInputData {
-    memory: Box<Shmem>,
+    // memory: Box<Shmem>,
+    memory: Box<[u8]>,
     len: usize,
 }
 
 impl MappedInputData {
     pub(crate) unsafe fn map(shared_memory_id: &str, len: usize) -> eyre::Result<Self> {
-        let memory = Box::new(
-            ShmemConf::new()
-                .os_id(shared_memory_id)
-                .writable(false)
-                .open()
-                .wrap_err("failed to map shared memory input")?,
-        );
-        Ok(MappedInputData { memory, len })
+        // let memory = Box::new(
+        //     ShmemConf::new()
+        //         .os_id(shared_memory_id)
+        //         .writable(false)
+        //         .open()
+        //         .wrap_err("failed to map shared memory input")?,
+        // );
+        // Ok(MappedInputData { memory, len })
+        Ok(MappedInputData {
+            memory: Box::new([0 as u8; 8]),
+            len,
+        })
     }
 }
 
@@ -120,7 +125,7 @@ impl std::ops::Deref for MappedInputData {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &self.memory.as_slice()[..self.len] }
+        unsafe { &self.memory[..self.len] }
     }
 }
 

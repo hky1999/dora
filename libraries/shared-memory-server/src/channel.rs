@@ -1,5 +1,5 @@
 use eyre::{eyre, Context};
-use raw_sync_2::events::{Event, EventImpl, EventInit, EventState};
+// use raw_sync_2::events::{Event, EventImpl, EventInit, EventState};
 use serde::{Deserialize, Serialize};
 use shared_memory_extended::Shmem;
 use std::{
@@ -10,8 +10,8 @@ use std::{
 
 pub struct ShmemChannel {
     memory: Shmem,
-    server_event: Box<dyn EventImpl>,
-    client_event: Box<dyn EventImpl>,
+    // server_event: Box<dyn EventImpl>,
+    // client_event: Box<dyn EventImpl>,
     disconnect_offset: usize,
     len_offset: usize,
     data_offset: usize,
@@ -21,20 +21,22 @@ pub struct ShmemChannel {
 #[allow(clippy::missing_safety_doc)]
 impl ShmemChannel {
     pub unsafe fn new_server(memory: Shmem) -> eyre::Result<Self> {
-        let (server_event, server_event_len) = unsafe { Event::new(memory.as_ptr(), true) }
-            .map_err(|err| eyre!("failed to open raw server event: {err}"))?;
-        let (client_event, client_event_len) =
-            unsafe { Event::new(memory.as_ptr().wrapping_add(server_event_len), true) }
-                .map_err(|err| eyre!("failed to open raw client event: {err}"))?;
+        // let (server_event, server_event_len) = unsafe { Event::new(memory.as_ptr(), true) }
+        //     .map_err(|err| eyre!("failed to open raw server event: {err}"))?;
+        // let (client_event, client_event_len) =
+        //     unsafe { Event::new(memory.as_ptr().wrapping_add(server_event_len), true) }
+        //         .map_err(|err| eyre!("failed to open raw client event: {err}"))?;
+        let server_event_len = 0;
+        let client_event_len = 0;
         let (disconnect_offset, len_offset, data_offset) =
             offsets(server_event_len, client_event_len);
 
-        server_event
-            .set(EventState::Clear)
-            .map_err(|err| eyre!("failed to init server_event: {err}"))?;
-        client_event
-            .set(EventState::Clear)
-            .map_err(|err| eyre!("failed to init client_event: {err}"))?;
+        // server_event
+        //     .set(EventState::Clear)
+        //     .map_err(|err| eyre!("failed to init server_event: {err}"))?;
+        // client_event
+        //     .set(EventState::Clear)
+        //     .map_err(|err| eyre!("failed to init client_event: {err}"))?;
         unsafe {
             memory
                 .as_ptr()
@@ -52,8 +54,8 @@ impl ShmemChannel {
 
         Ok(Self {
             memory,
-            server_event,
-            client_event,
+            // server_event,
+            // client_event,
             disconnect_offset,
             len_offset,
             data_offset,
@@ -62,18 +64,20 @@ impl ShmemChannel {
     }
 
     pub unsafe fn new_client(memory: Shmem) -> eyre::Result<Self> {
-        let (server_event, server_event_len) = unsafe { Event::from_existing(memory.as_ptr()) }
-            .map_err(|err| eyre!("failed to open raw server event: {err}"))?;
-        let (client_event, client_event_len) =
-            unsafe { Event::from_existing(memory.as_ptr().wrapping_add(server_event_len)) }
-                .map_err(|err| eyre!("failed to open raw client event: {err}"))?;
+        // let (server_event, server_event_len) = unsafe { Event::from_existing(memory.as_ptr()) }
+        //     .map_err(|err| eyre!("failed to open raw server event: {err}"))?;
+        // let (client_event, client_event_len) =
+        //     unsafe { Event::from_existing(memory.as_ptr().wrapping_add(server_event_len)) }
+        //         .map_err(|err| eyre!("failed to open raw client event: {err}"))?;
+        let server_event_len = 0;
+        let client_event_len = 0;
         let (disconnect_offset, len_offset, data_offset) =
             offsets(server_event_len, client_event_len);
 
         Ok(Self {
             memory,
-            server_event,
-            client_event,
+            // server_event,
+            // client_event,
             disconnect_offset,
             len_offset,
             data_offset,
@@ -102,14 +106,14 @@ impl ShmemChannel {
             .store(msg.len() as u64, std::sync::atomic::Ordering::Release);
 
         // signal event
-        let event = if self.server {
-            &self.client_event
-        } else {
-            &self.server_event
-        };
-        event
-            .set(EventState::Signaled)
-            .map_err(|err| eyre!("failed to send message over ShmemChannel: {err}"))?;
+        // let event = if self.server {
+        //     &self.client_event
+        // } else {
+        //     &self.server_event
+        // };
+        // event
+        //     .set(EventState::Signaled)
+        //     .map_err(|err| eyre!("failed to send message over ShmemChannel: {err}"))?;
 
         let disconnected = self.disconnect().load(std::sync::atomic::Ordering::Acquire);
         if disconnected {
@@ -124,17 +128,17 @@ impl ShmemChannel {
         T: for<'a> Deserialize<'a> + std::fmt::Debug,
     {
         // wait for event
-        let event = if self.server {
-            &self.server_event
-        } else {
-            &self.client_event
-        };
-        let timeout = timeout
-            .map(raw_sync_2::Timeout::Val)
-            .unwrap_or(raw_sync_2::Timeout::Infinite);
-        event
-            .wait(timeout)
-            .map_err(|err| eyre!("failed to receive from ShmemChannel: {err}"))?;
+        // let event = if self.server {
+        //     &self.server_event
+        // } else {
+        //     &self.client_event
+        // };
+        // let timeout = timeout
+        //     .map(raw_sync_2::Timeout::Val)
+        //     .unwrap_or(raw_sync_2::Timeout::Infinite);
+        // event
+        //     .wait(timeout)
+        //     .map_err(|err| eyre!("failed to receive from ShmemChannel: {err}"))?;
 
         // check for disconnect first
         if self.disconnect().load(std::sync::atomic::Ordering::Acquire) {
@@ -216,10 +220,10 @@ impl Drop for ShmemChannel {
             self.disconnect()
                 .store(true, std::sync::atomic::Ordering::Release);
 
-            // wake up server
-            if let Err(err) = self.server_event.set(EventState::Signaled) {
-                tracing::warn!("failed to signal ShmemChannel disconnect: {err}");
-            }
+            // // wake up server
+            // if let Err(err) = self.server_event.set(EventState::Signaled) {
+            //     tracing::warn!("failed to signal ShmemChannel disconnect: {err}");
+            // }
         }
     }
 }

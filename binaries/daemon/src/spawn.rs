@@ -23,10 +23,7 @@ use dora_node_api::{
 };
 use eyre::{ContextCompat, WrapErr};
 use std::{
-    env::consts::EXE_EXTENSION,
-    path::{Path, PathBuf},
-    process::Stdio,
-    sync::Arc,
+    env::consts::EXE_EXTENSION, path::{Path, PathBuf}, process::Stdio, str::FromStr, sync::Arc
 };
 use tokio::{
     fs::File,
@@ -73,6 +70,17 @@ pub async fn spawn_node(
         dataflow_descriptor,
         dynamic: node.kind.dynamic(),
     };
+
+    println!(
+        "DORA_NODE_CONFIG :\n{}",
+        serde_yaml::to_string(&node_config.clone()).wrap_err("failed to serialize node config")?,
+    );
+
+
+    return Ok(RunningNode {
+        pid: None,
+        node_config,
+    });
 
     let mut child = match node.kind {
         dora_core::descriptor::CoreNodeKind::Custom(n) => {
@@ -199,9 +207,10 @@ pub async fn spawn_node(
                     conda_env: Some(conda_env),
                 }) = &python_operator.config.source
                 {
-                    let conda = which::which("conda").context(
-                        "failed to find `conda`, yet a `conda_env` was defined. Make sure that `conda` is available.",
-                    )?;
+                    // let conda = which::which("conda").context(
+                    //     "failed to find `conda`, yet a `conda_env` was defined. Make sure that `conda` is available.",
+                    // )?;
+                    let conda = PathBuf::from_str("null")?;
                     let mut command = tokio::process::Command::new(conda);
                     command.args([
                         "run",

@@ -18,27 +18,27 @@ impl<'a> Extractor for MetadataMap<'a> {
     }
 }
 
-/// Init opentelemetry tracing
-///
-/// Use the default exporter Jaeger as exporter with
-/// - host: `172.17.0.1` which correspond to the docker address
-/// - port: 6831 which is the default Jaeger port.
-///
-/// To launch the associated Jaeger docker container, launch the
-/// following command:
-/// ```bash
-/// docker run -d -p 6831:6831/udp -p 6832:6832/udp -p 16686:16686 -p 14268:14268 jaegertracing/all-in-one:latest
-/// ```
-///
-/// TODO: Make Jaeger configurable
-///
-pub fn init_jaeger_tracing(name: &str, endpoint: &str) -> Result<sdktrace::Tracer, TraceError> {
-    global::set_text_map_propagator(TraceContextPropagator::new());
-    opentelemetry_jaeger::new_agent_pipeline()
-        .with_endpoint(endpoint)
-        .with_service_name(name)
-        .install_simple()
-}
+// /// Init opentelemetry tracing
+// ///
+// /// Use the default exporter Jaeger as exporter with
+// /// - host: `172.17.0.1` which correspond to the docker address
+// /// - port: 6831 which is the default Jaeger port.
+// ///
+// /// To launch the associated Jaeger docker container, launch the
+// /// following command:
+// /// ```bash
+// /// docker run -d -p 6831:6831/udp -p 6832:6832/udp -p 16686:16686 -p 14268:14268 jaegertracing/all-in-one:latest
+// /// ```
+// ///
+// /// TODO: Make Jaeger configurable
+// ///
+// pub fn init_jaeger_tracing(name: &str, endpoint: &str) -> Result<sdktrace::Tracer, TraceError> {
+//     global::set_text_map_propagator(TraceContextPropagator::new());
+//     opentelemetry_jaeger::new_agent_pipeline()
+//         .with_endpoint(endpoint)
+//         .with_service_name(name)
+//         .install_simple()
+// }
 
 pub fn serialize_context(context: &Context) -> String {
     let mut map = HashMap::new();
