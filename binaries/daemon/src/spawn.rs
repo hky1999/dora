@@ -74,6 +74,26 @@ pub async fn spawn_node(
         dynamic: node.kind.dynamic(),
     };
 
+    let cfg_yml =
+        serde_yaml::to_string(&node_config.clone()).wrap_err("failed to serialize node config")?;
+
+    match std::env::var("DORA_NODE_CONFIG_PATH") {
+        Ok(path) => {
+            let cfg_yml_file_name = format!("{}/{}.yml", path, node_id.clone().to_string());
+            std::fs::write(cfg_yml_file_name, cfg_yml.as_bytes())
+                .wrap_err("failed to serialize node config")?;
+        }
+        Err(_) => {
+            println!("DORA_NODE_CONFIG:\n{}", cfg_yml);
+            println!("You may want to set file path for save DORA_NODE_CONFIG through DORA_NODE_CONFIG_PATH");
+        }
+    }
+
+    return Ok(RunningNode {
+        pid: None,
+        node_config,
+    });
+
     let mut child = match node.kind {
         dora_core::descriptor::CoreNodeKind::Custom(n) => {
             let mut command = match n.source.as_str() {
