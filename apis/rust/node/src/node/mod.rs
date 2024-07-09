@@ -9,7 +9,10 @@ use aligned_vec::{AVec, ConstAlign};
 use arrow::array::Array;
 use dora_core::{
     config::{DataId, NodeId, NodeRunConfig},
-    daemon_messages::{DaemonRequest, DataMessage, DataflowId, DropToken, NodeConfig, Timestamped},
+    daemon_messages::{
+        DaemonCommunication, DaemonRequest, DataMessage, DataflowId, DropToken, NodeConfig,
+        Timestamped,
+    },
     descriptor::Descriptor,
     message::{uhlc, ArrowTypeInfo, Metadata, MetadataParameters},
     topics::{DORA_DAEMON_LOCAL_LISTEN_PORT_DEFAULT, LOCALHOST},
@@ -19,6 +22,7 @@ use eyre::{bail, WrapErr};
 // use shared_memory_extended::{Shmem, ShmemConf};
 use std::{
     collections::{HashMap, VecDeque},
+    net::IpAddr,
     ops::{Deref, DerefMut},
     sync::Arc,
     time::Duration,
@@ -32,7 +36,9 @@ pub mod arrow_utils;
 mod control_channel;
 mod drop_stream;
 
-pub const ZERO_COPY_THRESHOLD: usize = 4096;
+// pub const ZERO_COPY_THRESHOLD: usize = 4096;
+// To run without shared memory support.
+pub const ZERO_COPY_THRESHOLD: usize = usize::MAX;
 
 pub struct DoraNode {
     id: NodeId,
@@ -97,12 +103,23 @@ impl DoraNode {
     /// use dora_node_api::DoraNode;
     /// use dora_node_api::dora_core::config::NodeId;
     ///
-    /// let (mut node, mut events) = DoraNode::init_from_node_id(NodeId::from("plot".to_string())).expect("Could not init node plot");
+    ///     let (_node, mut events) = DoraNode::init_from_node_id(
+    ///         NodeId::from("arceos-node-dynamic".to_string()),
+    ///         Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+    ///     ).expect("Could not init node plot");
     /// ```
     ///
-    pub fn init_from_node_id(node_id: NodeId) -> eyre::Result<(Self, EventStream)> {
+    pub fn init_from_node_id(
+        node_id: NodeId,
+        remote_addr: Option<IpAddr>,
+    ) -> eyre::Result<(Self, EventStream)> {
         // Make sure that the node is initialized outside of dora start.
-        let daemon_address = (LOCALHOST, DORA_DAEMON_LOCAL_LISTEN_PORT_DEFAULT).into();
+        let remote_ip = if let Some(ip) = remote_addr {
+            ip
+        } else {
+            LOCALHOST
+        };
+        let daemon_address = (remote_ip, DORA_DAEMON_LOCAL_LISTEN_PORT_DEFAULT).into();
 
         let mut channel =
             DaemonChannel::new_tcp(daemon_address).context("Could not connect to the daemon")?;
@@ -116,8 +133,21 @@ impl DoraNode {
             .wrap_err("failed to request node config from daemon")?;
         match reply {
             dora_core::daemon_messages::DaemonReply::NodeConfig {
-                result: Ok(node_config),
-            } => Self::init(node_config),
+                result: Ok(mut node_config),
+            } => {
+                // Replace the `socket_addr` in the `node_config` returned by daemon 
+                // with the `remote_ip` of the machine where daemon is located.
+                // Todo: make it more elgant.
+                match node_config.daemon_communication {
+                    DaemonCommunication::Tcp { socket_addr } => {
+                        node_config.daemon_communication = DaemonCommunication::Tcp {
+                            socket_addr: (remote_ip, socket_addr.port()).into(),
+                        };
+                    }
+                    _ => {}
+                };
+                Self::init(node_config)
+            }
             dora_core::daemon_messages::DaemonReply::NodeConfig { result: Err(error) } => {
                 bail!("failed to get node config from daemon: {error}")
             }
@@ -130,7 +160,7 @@ impl DoraNode {
             info!("Skipping {node_id} specified within the node initialization in favor of `DORA_NODE_CONFIG` specified by `dora start`");
             Self::init_from_env()
         } else {
-            Self::init_from_node_id(node_id)
+            Self::init_from_node_id(node_id, None)
         }
     }
 

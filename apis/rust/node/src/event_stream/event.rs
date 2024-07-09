@@ -105,7 +105,7 @@ pub struct MappedInputData {
 }
 
 impl MappedInputData {
-    pub(crate) unsafe fn map(shared_memory_id: &str, len: usize) -> eyre::Result<Self> {
+    pub(crate) unsafe fn map(_shared_memory_id: &str, len: usize) -> eyre::Result<Self> {
         // let memory = Box::new(
         //     ShmemConf::new()
         //         .os_id(shared_memory_id)
@@ -115,7 +115,8 @@ impl MappedInputData {
         // );
         // Ok(MappedInputData { memory, len })
         Ok(MappedInputData {
-            memory: Box::new([0 as u8; 8]),
+            // memory: vec![0 as u8; len],
+            memory: vec![0 as u8; len].into_boxed_slice(),
             len,
         })
     }
@@ -125,7 +126,7 @@ impl std::ops::Deref for MappedInputData {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { &self.memory[..self.len] }
+        &self.memory[..self.len]
     }
 }
 
