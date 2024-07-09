@@ -11,7 +11,7 @@ use tracing_subscriber::{
     filter::FilterExt, prelude::__tracing_subscriber_SubscriberExt, EnvFilter, Layer,
 };
 
-use eyre::ContextCompat;
+// use eyre::ContextCompat;
 use tracing_subscriber::Registry;
 pub mod telemetry;
 

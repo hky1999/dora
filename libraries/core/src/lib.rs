@@ -1,4 +1,5 @@
-use eyre::{bail, eyre, Context};
+// use eyre::{bail, eyre, Context};
+use eyre::{bail, eyre};
 use std::{
     env::consts::{DLL_PREFIX, DLL_SUFFIX},
     ffi::OsStr,
@@ -60,7 +61,7 @@ pub fn get_pip_path() -> Result<std::path::PathBuf, eyre::ErrReport> {
 }
 
 // Helper function to run a program
-pub async fn run<S>(program: S, args: &[&str], pwd: Option<&Path>) -> eyre::Result<()>
+pub async fn run<S>(_program: S, _args: &[&str], _pwd: Option<&Path>) -> eyre::Result<()>
 where
     S: AsRef<OsStr>,
 {

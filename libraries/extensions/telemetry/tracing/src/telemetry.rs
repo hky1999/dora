@@ -1,6 +1,6 @@
 use opentelemetry::propagation::Extractor;
-use opentelemetry::sdk::{propagation::TraceContextPropagator, trace as sdktrace};
-use opentelemetry::trace::TraceError;
+// use opentelemetry::sdk::{propagation::TraceContextPropagator, trace as sdktrace};
+// use opentelemetry::trace::TraceError;
 use opentelemetry::{global, Context};
 use std::collections::HashMap;
 
