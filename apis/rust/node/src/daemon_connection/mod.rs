@@ -4,39 +4,39 @@ use dora_core::{
     message::uhlc::Timestamp,
 };
 use eyre::{bail, eyre, Context};
-// use shared_memory_server::{ShmemClient, ShmemConf};
-use std::{
-    net::{SocketAddr, TcpStream},
-    // time::Duration,
-};
+#[cfg(feature = "shmem")]
+use shared_memory_server::{ShmemClient, ShmemConf};
+use std::net::{SocketAddr, TcpStream};
 
 mod tcp;
 
 pub enum DaemonChannel {
-    // Shmem(ShmemClient<Timestamped<DaemonRequest>, DaemonReply>),
+    #[cfg(feature = "shmem")]
+    Shmem(ShmemClient<Timestamped<DaemonRequest>, DaemonReply>),
     Tcp(TcpStream),
 }
 
 impl DaemonChannel {
     #[tracing::instrument(level = "trace")]
     pub fn new_tcp(socket_addr: SocketAddr) -> eyre::Result<Self> {
-        println!("DaemonChannel: try to connect to {}", socket_addr);
         let stream = TcpStream::connect(socket_addr).wrap_err("failed to open TCP connection")?;
         stream.set_nodelay(true).context("failed to set nodelay")?;
         Ok(DaemonChannel::Tcp(stream))
     }
 
+    #[cfg(feature = "shmem")]
     #[tracing::instrument(level = "trace")]
     pub unsafe fn new_shmem(daemon_control_region_id: &str) -> eyre::Result<Self> {
-        // let daemon_events_region = ShmemConf::new()
-        //     .os_id(daemon_control_region_id)
-        //     .open()
-        //     .wrap_err("failed to connect to dora-daemon")?;
-        // let channel = DaemonChannel::Shmem(
-        //     unsafe { ShmemClient::new(daemon_events_region, Some(Duration::from_secs(5))) }
-        //         .wrap_err("failed to create ShmemChannel")?,
-        // );
-        unimplemented!()
+        use std::time::Duration;
+        let daemon_events_region = ShmemConf::new()
+            .os_id(daemon_control_region_id)
+            .open()
+            .wrap_err("failed to connect to dora-daemon")?;
+        let channel = DaemonChannel::Shmem(
+            unsafe { ShmemClient::new(daemon_events_region, Some(Duration::from_secs(5))) }
+                .wrap_err("failed to create ShmemChannel")?,
+        );
+        Ok(channel)
     }
 
     pub fn register(
@@ -68,7 +68,8 @@ impl DaemonChannel {
 
     pub fn request(&mut self, request: &Timestamped<DaemonRequest>) -> eyre::Result<DaemonReply> {
         match self {
-            // DaemonChannel::Shmem(client) => client.request(request),
+            #[cfg(feature = "shmem")]
+            DaemonChannel::Shmem(client) => client.request(request),
             DaemonChannel::Tcp(stream) => tcp::request(stream, request),
         }
     }

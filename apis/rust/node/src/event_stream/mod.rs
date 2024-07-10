@@ -1,16 +1,18 @@
 use std::{sync::Arc, time::Duration};
 
-pub use event::{Event, MappedInputData, RawData};
+#[cfg(feature = "shmem")]
+pub use self::shmem::MappedInputData;
+pub use event::{Event, RawData};
+
 use futures::{
     future::{select, Either},
     Stream, StreamExt,
 };
 use futures_timer::Delay;
 
-use self::{
-    event::SharedMemoryData,
-    thread::{EventItem, EventStreamThreadHandle},
-};
+#[cfg(feature = "shmem")]
+use self::shmem::SharedMemoryData;
+use self::thread::{EventItem, EventStreamThreadHandle};
 use crate::daemon_connection::DaemonChannel;
 use dora_core::{
     config::NodeId,
@@ -23,6 +25,8 @@ use eyre::{eyre, Context};
 
 mod event;
 pub mod merged;
+#[cfg(feature = "shmem")]
+pub mod shmem;
 mod thread;
 
 pub struct EventStream {
@@ -42,6 +46,7 @@ impl EventStream {
         clock: Arc<uhlc::HLC>,
     ) -> eyre::Result<Self> {
         let channel = match daemon_communication {
+            #[cfg(feature = "shmem")]
             DaemonCommunication::Shmem {
                 daemon_events_region_id,
                 ..
@@ -53,6 +58,7 @@ impl EventStream {
         };
 
         let close_channel = match daemon_communication {
+            #[cfg(feature = "shmem")]
             DaemonCommunication::Shmem {
                 daemon_events_close_region_id,
                 ..
@@ -132,7 +138,10 @@ impl EventStream {
 
     fn convert_event_item(item: EventItem) -> Event {
         match item {
-            EventItem::NodeEvent { event, ack_channel } => match event {
+            EventItem::NodeEvent {
+                event,
+                ack_channel: _ack_channel,
+            } => match event {
                 NodeEvent::Stop => Event::Stop,
                 NodeEvent::Reload { operator_id } => Event::Reload { operator_id },
                 NodeEvent::InputClosed { id } => Event::InputClosed { id },
@@ -140,6 +149,7 @@ impl EventStream {
                     let data = match data {
                         None => Ok(None),
                         Some(daemon_messages::DataMessage::Vec(v)) => Ok(Some(RawData::Vec(v))),
+                        #[cfg(feature = "shmem")]
                         Some(daemon_messages::DataMessage::SharedMemory {
                             shared_memory_id,
                             len,
@@ -148,7 +158,7 @@ impl EventStream {
                             MappedInputData::map(&shared_memory_id, len).map(|data| {
                                 Some(RawData::SharedMemory(SharedMemoryData {
                                     data,
-                                    _drop: ack_channel,
+                                    _drop: _ack_channel,
                                 }))
                             })
                         },

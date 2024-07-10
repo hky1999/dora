@@ -22,6 +22,7 @@ impl ControlChannel {
         clock: Arc<HLC>,
     ) -> eyre::Result<Self> {
         let channel = match daemon_communication {
+            #[cfg(feature = "shmem")]
             DaemonCommunication::Shmem {
                 daemon_control_region_id,
                 ..

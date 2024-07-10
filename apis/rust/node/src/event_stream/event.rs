@@ -1,5 +1,7 @@
 use std::{ptr::NonNull, sync::Arc};
 
+#[cfg(feature = "shmem")]
+use crate::event_stream::shmem::SharedMemoryData;
 use aligned_vec::{AVec, ConstAlign};
 use dora_arrow_convert::{ArrowData, IntoArrow};
 use dora_core::{
@@ -7,7 +9,6 @@ use dora_core::{
     message::{ArrowTypeInfo, BufferOffset, Metadata},
 };
 use eyre::{Context, Result};
-// use shared_memory_extended::{Shmem, ShmemConf};
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -30,6 +31,7 @@ pub enum Event {
 pub enum RawData {
     Empty,
     Vec(AVec<u8, ConstAlign<128>>),
+    #[cfg(feature = "shmem")]
     SharedMemory(SharedMemoryData),
 }
 
@@ -43,6 +45,7 @@ impl RawData {
 
                 unsafe { arrow::buffer::Buffer::from_custom_allocation(ptr, len, Arc::new(data)) }
             }
+            #[cfg(feature = "shmem")]
             RawData::SharedMemory(data) => {
                 let ptr = NonNull::new(data.data.as_ptr() as *mut _).unwrap();
                 let len = data.data.len();
@@ -53,11 +56,6 @@ impl RawData {
 
         buffer_into_arrow_array(&raw_buffer, type_info)
     }
-}
-
-pub struct SharedMemoryData {
-    pub data: MappedInputData,
-    pub _drop: flume::Sender<()>,
 }
 
 fn buffer_into_arrow_array(
@@ -97,38 +95,3 @@ impl std::fmt::Debug for RawData {
         f.debug_struct("Data").finish_non_exhaustive()
     }
 }
-
-pub struct MappedInputData {
-    // memory: Box<Shmem>,
-    memory: Box<[u8]>,
-    len: usize,
-}
-
-impl MappedInputData {
-    pub(crate) unsafe fn map(_shared_memory_id: &str, len: usize) -> eyre::Result<Self> {
-        // let memory = Box::new(
-        //     ShmemConf::new()
-        //         .os_id(shared_memory_id)
-        //         .writable(false)
-        //         .open()
-        //         .wrap_err("failed to map shared memory input")?,
-        // );
-        // Ok(MappedInputData { memory, len })
-        Ok(MappedInputData {
-            // memory: vec![0 as u8; len],
-            memory: vec![0 as u8; len].into_boxed_slice(),
-            len,
-        })
-    }
-}
-
-impl std::ops::Deref for MappedInputData {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &self.memory[..self.len]
-    }
-}
-
-unsafe impl Send for MappedInputData {}
-unsafe impl Sync for MappedInputData {}

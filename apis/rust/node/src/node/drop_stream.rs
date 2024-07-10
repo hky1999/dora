@@ -26,6 +26,7 @@ impl DropStream {
         hlc: Arc<uhlc::HLC>,
     ) -> eyre::Result<Self> {
         let channel = match daemon_communication {
+            #[cfg(feature = "shmem")]
             DaemonCommunication::Shmem {
                 daemon_drop_region_id,
                 ..

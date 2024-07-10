@@ -17,7 +17,9 @@ pub use arrow;
 pub use dora_arrow_convert::*;
 pub use dora_core;
 pub use dora_core::message::{uhlc, Metadata, MetadataParameters};
-pub use event_stream::{merged, Event, EventStream, MappedInputData, RawData};
+#[cfg(feature = "shmem")]
+pub use event_stream::MappedInputData;
+pub use event_stream::{merged, Event, EventStream, RawData};
 pub use flume::Receiver;
 pub use node::{arrow_utils, DataSample, DoraNode, ZERO_COPY_THRESHOLD};
 

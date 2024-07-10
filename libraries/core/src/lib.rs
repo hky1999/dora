@@ -3,7 +3,8 @@ use eyre::{bail, eyre};
 use std::{
     env::consts::{DLL_PREFIX, DLL_SUFFIX},
     ffi::OsStr,
-    path::{Path, PathBuf}, str::FromStr,
+    path::{Path, PathBuf},
+    str::FromStr,
 };
 
 pub use dora_message as message;
@@ -74,7 +75,7 @@ where
     // if !run.status().await?.success() {
     //     eyre::bail!("failed to run {args:?}");
     // };
-    
+
     // Ok(())
     unimplemented!()
 }

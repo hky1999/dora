@@ -3,7 +3,7 @@ use eyre::{bail, Context};
 
 fn main() -> eyre::Result<()> {
     let (_node, mut events) =
-        DoraNode::init_from_node_id(NodeId::from("rust-sink-dynamic".to_string()))?;
+        DoraNode::init_from_node_id(NodeId::from("rust-sink-dynamic".to_string()), None)?;
 
     while let Some(event) = events.recv() {
         match event {

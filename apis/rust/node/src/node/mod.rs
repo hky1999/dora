@@ -10,22 +10,27 @@ use arrow::array::Array;
 use dora_core::{
     config::{DataId, NodeId, NodeRunConfig},
     daemon_messages::{
-        DaemonCommunication, DaemonRequest, DataMessage, DataflowId, DropToken, NodeConfig,
-        Timestamped,
+        DaemonCommunication, DaemonRequest, DataMessage, DataflowId, NodeConfig, Timestamped,
     },
     descriptor::Descriptor,
     message::{uhlc, ArrowTypeInfo, Metadata, MetadataParameters},
     topics::{DORA_DAEMON_LOCAL_LISTEN_PORT_DEFAULT, LOCALHOST},
 };
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "shmem")] {
+        use dora_core::daemon_messages::DropToken;
+        use std::{collections::{HashMap, VecDeque}, time::Duration};
+    }
+}
 use eyre::{bail, WrapErr};
-// use shared_memory_extended::{Shmem, ShmemConf};
+
+#[cfg(feature = "shmem")]
+use shared_memory_extended::{Shmem, ShmemConf};
 use std::{
-    collections::{HashMap, VecDeque},
     net::IpAddr,
     ops::{Deref, DerefMut},
     sync::Arc,
-    time::Duration,
 };
 use tracing::info;
 
@@ -36,8 +41,11 @@ pub mod arrow_utils;
 mod control_channel;
 mod drop_stream;
 
-// pub const ZERO_COPY_THRESHOLD: usize = 4096;
+#[cfg(feature = "shmem")]
+pub const ZERO_COPY_THRESHOLD: usize = 4096;
+
 // To run without shared memory support.
+#[cfg(not(feature = "shmem"))]
 pub const ZERO_COPY_THRESHOLD: usize = usize::MAX;
 
 pub struct DoraNode {
@@ -47,8 +55,11 @@ pub struct DoraNode {
     control_channel: ControlChannel,
     clock: Arc<uhlc::HLC>,
 
+    #[cfg(feature = "shmem")]
     sent_out_shared_memory: HashMap<DropToken, ShmemHandle>,
+    #[cfg(feature = "shmem")]
     drop_stream: DropStream,
+    #[cfg(feature = "shmem")]
     cache: VecDeque<ShmemHandle>,
 
     dataflow_descriptor: Descriptor,
@@ -135,7 +146,7 @@ impl DoraNode {
             dora_core::daemon_messages::DaemonReply::NodeConfig {
                 result: Ok(mut node_config),
             } => {
-                // Replace the `socket_addr` in the `node_config` returned by daemon 
+                // Replace the `socket_addr` in the `node_config` returned by daemon
                 // with the `remote_ip` of the machine where daemon is located.
                 // Todo: make it more elgant.
                 match node_config.daemon_communication {
@@ -179,6 +190,7 @@ impl DoraNode {
         let event_stream =
             EventStream::init(dataflow_id, &node_id, &daemon_communication, clock.clone())
                 .wrap_err("failed to init event stream")?;
+        #[cfg(feature = "shmem")]
         let drop_stream =
             DropStream::init(dataflow_id, &node_id, &daemon_communication, clock.clone())
                 .wrap_err("failed to init drop stream")?;
@@ -192,8 +204,11 @@ impl DoraNode {
             node_config: run_config.clone(),
             control_channel,
             clock,
+            #[cfg(feature = "shmem")]
             sent_out_shared_memory: HashMap::new(),
+            #[cfg(feature = "shmem")]
             drop_stream,
+            #[cfg(feature = "shmem")]
             cache: VecDeque::new(),
             dataflow_descriptor,
         };
@@ -296,6 +311,7 @@ impl DoraNode {
         parameters: MetadataParameters,
         sample: Option<DataSample>,
     ) -> eyre::Result<()> {
+        #[cfg(feature = "shmem")]
         self.handle_finished_drop_tokens()?;
 
         if !self.node_config.outputs.contains(&output_id) {
@@ -307,19 +323,22 @@ impl DoraNode {
             parameters.into_owned(),
         );
 
-        let (data, shmem) = match sample {
-            Some(sample) => sample.finalize(),
-            None => (None, None),
+        let data = match sample {
+            Some(sample) => match sample.finalize() {
+                DataSampleType::Vec(data) => Some(data),
+                #[cfg(feature = "shmem")]
+                DataSampleType::Shmem(data, shared_memory, drop_token) => {
+                    self.sent_out_shared_memory
+                        .insert(drop_token, shared_memory);
+                    Some(data)
+                }
+            },
+            None => None,
         };
 
         self.control_channel
             .send_message(output_id.clone(), metadata, data)
             .wrap_err_with(|| format!("failed to send output {output_id}"))?;
-
-        if let Some((shared_memory, drop_token)) = shmem {
-            self.sent_out_shared_memory
-                .insert(drop_token, shared_memory);
-        }
 
         Ok(())
     }
@@ -351,6 +370,7 @@ impl DoraNode {
     }
 
     pub fn allocate_data_sample(&mut self, data_len: usize) -> eyre::Result<DataSample> {
+        #[cfg(feature = "shmem")]
         let data = if data_len >= ZERO_COPY_THRESHOLD {
             // create shared memory region
             let shared_memory = self.allocate_shared_memory(data_len)?;
@@ -365,9 +385,16 @@ impl DoraNode {
             avec.into()
         };
 
+        #[cfg(not(feature = "shmem"))]
+        let data = {
+            let avec: AVec<u8, ConstAlign<128>> = AVec::__from_elem(128, 0, data_len);
+            avec.into()
+        };
+
         Ok(data)
     }
 
+    #[cfg(feature = "shmem")]
     fn allocate_shared_memory(&mut self, data_len: usize) -> eyre::Result<ShmemHandle> {
         let cache_index = self
             .cache
@@ -382,20 +409,20 @@ impl DoraNode {
                 // we know that this index exists, so we can safely unwrap here
                 self.cache.remove(i).unwrap()
             }
-            // None => ShmemHandle(Box::new(
-            //     ShmemConf::new()
-            //         .size(data_len)
-            //         .writable(true)
-            //         .create()
-            //         .wrap_err("failed to allocate shared memory")?,
-            // )),
-            None => ShmemHandle(Box::new([0 as u8; 8])),
+            None => ShmemHandle(Box::new(
+                ShmemConf::new()
+                    .size(data_len)
+                    .writable(true)
+                    .create()
+                    .wrap_err("failed to allocate shared memory")?,
+            )),
         };
         assert!(memory.len() >= data_len);
 
         Ok(memory)
     }
 
+    #[cfg(feature = "shmem")]
     fn handle_finished_drop_tokens(&mut self) -> eyre::Result<()> {
         loop {
             match self.drop_stream.try_recv() {
@@ -412,6 +439,7 @@ impl DoraNode {
         Ok(())
     }
 
+    #[cfg(feature = "shmem")]
     fn add_to_cache(&mut self, memory: ShmemHandle) {
         const MAX_CACHE_SIZE: usize = 20;
 
@@ -445,6 +473,7 @@ impl Drop for DoraNode {
             tracing::warn!("{err:?}")
         }
 
+        #[cfg(feature = "shmem")]
         while !self.sent_out_shared_memory.is_empty() {
             if self.drop_stream.len() == 0 {
                 tracing::trace!(
@@ -487,20 +516,26 @@ pub struct DataSample {
     len: usize,
 }
 
+enum DataSampleType {
+    Vec(DataMessage),
+    #[cfg(feature = "shmem")]
+    Shmem(DataMessage, ShmemHandle, DropToken),
+}
+
 impl DataSample {
-    fn finalize(self) -> (Option<DataMessage>, Option<(ShmemHandle, DropToken)>) {
+    fn finalize(self) -> DataSampleType {
         match self.inner {
-            // DataSampleInner::Shmem(shared_memory) => {
-            //     let drop_token = DropToken::generate();
-            //     let data = DataMessage::SharedMemory {
-            //         shared_memory_id: shared_memory.get_os_id().to_owned(),
-            //         len: self.len,
-            //         drop_token,
-            //     };
-            //     (Some(data), Some((shared_memory, drop_token)))
-            // }
-            DataSampleInner::Vec(buffer) => (Some(DataMessage::Vec(buffer)), None),
-            _ => unimplemented!(),
+            #[cfg(feature = "shmem")]
+            DataSampleInner::Shmem(shared_memory) => {
+                let drop_token = DropToken::generate();
+                let data = DataMessage::SharedMemory {
+                    shared_memory_id: shared_memory.get_os_id().to_owned(),
+                    len: self.len,
+                    drop_token,
+                };
+                DataSampleType::Shmem(data, shared_memory, drop_token)
+            }
+            DataSampleInner::Vec(buffer) => DataSampleType::Vec(DataMessage::Vec(buffer)),
         }
     }
 }
@@ -510,9 +545,9 @@ impl Deref for DataSample {
 
     fn deref(&self) -> &Self::Target {
         let slice = match &self.inner {
-            // DataSampleInner::Shmem(handle) => unsafe { handle },
+            #[cfg(feature = "shmem")]
+            DataSampleInner::Shmem(handle) => unsafe { handle.as_slice() },
             DataSampleInner::Vec(data) => data,
-            _ => unimplemented!(),
         };
         &slice[..self.len]
     }
@@ -521,9 +556,9 @@ impl Deref for DataSample {
 impl DerefMut for DataSample {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let slice = match &mut self.inner {
-            // DataSampleInner::Shmem(handle) => unsafe { handle.as_mut() },
+            #[cfg(feature = "shmem")]
+            DataSampleInner::Shmem(handle) => unsafe { handle.as_slice_mut() },
             DataSampleInner::Vec(data) => data,
-            _ => unimplemented!(),
         };
         &mut slice[..self.len]
     }
@@ -541,6 +576,7 @@ impl From<AVec<u8, ConstAlign<128>>> for DataSample {
 impl std::fmt::Debug for DataSample {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let kind = match &self.inner {
+            #[cfg(feature = "shmem")]
             DataSampleInner::Shmem(_) => "SharedMemory",
             DataSampleInner::Vec(_) => "Vec",
         };
@@ -552,26 +588,30 @@ impl std::fmt::Debug for DataSample {
 }
 
 enum DataSampleInner {
+    #[cfg(feature = "shmem")]
     Shmem(ShmemHandle),
     Vec(AVec<u8, ConstAlign<128>>),
 }
 
-struct ShmemHandle(Box<[u8]>);
+cfg_if::cfg_if! {
+    if #[cfg(feature = "shmem")] {
+        struct ShmemHandle(Box<Shmem>);
 
-impl Deref for ShmemHandle {
-    // type Target = Shmem;
-    type Target = [u8];
+        impl Deref for ShmemHandle {
+            type Target = Shmem;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl DerefMut for ShmemHandle {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+
+        unsafe impl Send for ShmemHandle {}
+        unsafe impl Sync for ShmemHandle {}
     }
 }
-
-impl DerefMut for ShmemHandle {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-unsafe impl Send for ShmemHandle {}
-unsafe impl Sync for ShmemHandle {}
