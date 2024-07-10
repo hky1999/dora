@@ -3,7 +3,6 @@ use crate::{daemon_connection::DaemonChannel, EventStream};
 use self::{
     arrow_utils::{copy_array_into_sample, required_data_size},
     control_channel::ControlChannel,
-    drop_stream::DropStream,
 };
 use aligned_vec::{AVec, ConstAlign};
 use arrow::array::Array;
@@ -17,16 +16,19 @@ use dora_core::{
     topics::{DORA_DAEMON_LOCAL_LISTEN_PORT_DEFAULT, LOCALHOST},
 };
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "shmem")] {
-        use dora_core::daemon_messages::DropToken;
-        use std::{collections::{HashMap, VecDeque}, time::Duration};
-    }
-}
 use eyre::{bail, WrapErr};
 
 #[cfg(feature = "shmem")]
-use shared_memory_extended::{Shmem, ShmemConf};
+use {
+    self::drop_stream::DropStream,
+    dora_core::daemon_messages::DropToken,
+    shared_memory_extended::{Shmem, ShmemConf},
+    std::{
+        collections::{HashMap, VecDeque},
+        time::Duration,
+    },
+};
+
 use std::{
     net::IpAddr,
     ops::{Deref, DerefMut},
@@ -39,6 +41,7 @@ use dora_tracing::set_up_tracing;
 
 pub mod arrow_utils;
 mod control_channel;
+#[cfg(feature = "shmem")]
 mod drop_stream;
 
 #[cfg(feature = "shmem")]
@@ -149,13 +152,14 @@ impl DoraNode {
                 // Replace the `socket_addr` in the `node_config` returned by daemon
                 // with the `remote_ip` of the machine where daemon is located.
                 // Todo: make it more elgant.
+                #[allow(unreachable_patterns)]
                 match node_config.daemon_communication {
                     DaemonCommunication::Tcp { socket_addr } => {
                         node_config.daemon_communication = DaemonCommunication::Tcp {
                             socket_addr: (remote_ip, socket_addr.port()).into(),
                         };
                     }
-                    _ => {}
+                    _ => {} // Do nothing if it's `Shmem`.
                 };
                 Self::init(node_config)
             }
