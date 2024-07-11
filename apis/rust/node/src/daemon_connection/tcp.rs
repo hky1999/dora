@@ -5,6 +5,7 @@ use std::{
     net::TcpStream,
 };
 
+#[derive(Debug)]
 enum Serializer {
     Bincode,
     SerdeJson,
@@ -30,6 +31,13 @@ fn send_message(
     connection: &mut TcpStream,
     message: &Timestamped<DaemonRequest>,
 ) -> eyre::Result<()> {
+    println!(
+        "[TRACE] Node on {:?} send_message to {:?}, msg {:?}",
+        connection.local_addr(),
+        connection.peer_addr(),
+        message
+    );
+
     let serialized = bincode::serialize(&message).wrap_err("failed to serialize DaemonRequest")?;
     tcp_send(connection, &serialized).wrap_err("failed to send DaemonRequest")?;
     Ok(())
@@ -39,11 +47,23 @@ fn receive_reply(
     connection: &mut TcpStream,
     serializer: Serializer,
 ) -> eyre::Result<Option<DaemonReply>> {
+    println!(
+        "[TRACE] Node on {:?} try to receive_reply from {:?}",
+        connection.local_addr(),
+        connection.peer_addr(),
+    );
+
     let raw = match tcp_receive(connection) {
         Ok(raw) => raw,
         Err(err) => match err.kind() {
             std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::ConnectionAborted => {
-                return Ok(None)
+                println!(
+                    "[TRACE] Node on {:?} receive_reply from {:?}, err {:?}",
+                    connection.local_addr(),
+                    connection.peer_addr(),
+                    err
+                );
+                return Ok(None);
             }
             other => {
                 return Err(err).with_context(|| {
@@ -54,14 +74,34 @@ fn receive_reply(
             }
         },
     };
-    match serializer {
+
+    println!(
+        "[TRACE] Node on {:?} get_reply from {:?}, raw_length {:x?} serializer {:?}",
+        connection.local_addr(),
+        connection.peer_addr(),
+        raw,
+        serializer
+    );
+
+    let res = match serializer {
         Serializer::Bincode => bincode::deserialize(&raw)
             .wrap_err("failed to deserialize DaemonReply")
-            .map(Some),
+            .map(|msg| {
+                println!("[TRACE] Serializer::Bincode, msg {:?}", msg);
+
+                Some(msg)
+            }),
         Serializer::SerdeJson => serde_json::from_slice(&raw)
             .wrap_err("failed to deserialize DaemonReply")
-            .map(Some),
-    }
+            .map(|msg| {
+                println!("[TRACE] Serializer::SerdeJson, msg {:?}", msg);
+                Some(msg)
+            }),
+    };
+
+    println!("[TRACE] get res {:?}", res);
+
+    res
 }
 
 fn tcp_send(connection: &mut (impl Write + Unpin), message: &[u8]) -> std::io::Result<()> {

@@ -45,6 +45,7 @@ impl EventStream {
         daemon_communication: &DaemonCommunication,
         clock: Arc<uhlc::HLC>,
     ) -> eyre::Result<Self> {
+        println!("[TRACE] EventStream init {:#?}", daemon_communication);
         let channel = match daemon_communication {
             #[cfg(feature = "shmem")]
             DaemonCommunication::Shmem {

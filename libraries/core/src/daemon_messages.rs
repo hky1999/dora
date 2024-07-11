@@ -154,22 +154,16 @@ impl fmt::Debug for DataMessage {
     }
 }
 
-#[cfg(feature = "shmem")]
 type SharedMemoryId = String;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[must_use]
 pub enum DaemonReply {
     Result(Result<(), String>),
-    #[cfg(feature = "shmem")]
-    PreparedMessage {
-        shared_memory_id: SharedMemoryId,
-    }, // This field is not used.
+    PreparedMessage { shared_memory_id: SharedMemoryId }, // This field is not used.
     NextEvents(Vec<Timestamped<NodeEvent>>),
     NextDropEvents(Vec<Timestamped<NodeDropEvent>>),
-    NodeConfig {
-        result: Result<NodeConfig, String>,
-    },
+    NodeConfig { result: Result<NodeConfig, String> },
     Empty,
 }
 

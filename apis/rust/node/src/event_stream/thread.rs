@@ -117,6 +117,7 @@ fn event_stream_loop(
             }
         };
         for Timestamped { inner, timestamp } in events {
+            println!("[TRACE] event_stream_loop inner {:?}", inner);
             if let Err(err) = clock.update_with_timestamp(&timestamp) {
                 tracing::warn!("failed to update HLC: {err}");
             }

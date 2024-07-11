@@ -21,6 +21,7 @@ impl ControlChannel {
         daemon_communication: &DaemonCommunication,
         clock: Arc<HLC>,
     ) -> eyre::Result<Self> {
+        println!("[TRACE] ControlChannel init {:#?}", daemon_communication);
         let channel = match daemon_communication {
             #[cfg(feature = "shmem")]
             DaemonCommunication::Shmem {
@@ -87,6 +88,15 @@ impl ControlChannel {
         metadata: Metadata,
         data: Option<DataMessage>,
     ) -> eyre::Result<()> {
+        println!(
+            "[TRACE] ControlChannel send_message output_id {:?}",
+            output_id
+        );
+        println!(
+            "[TRACE] ControlChannel send_message metadata {:?}",
+            metadata
+        );
+        println!("[TRACE] ControlChannel send_message data {:?}", data);
         let request = DaemonRequest::SendMessage {
             output_id,
             metadata,

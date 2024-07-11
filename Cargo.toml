@@ -53,7 +53,7 @@ dora-operator-api-types = { version = "0.3.5", path = "apis/rust/operator/types"
 dora-operator-api-python = { version = "0.3.5", path = "apis/python/operator" }
 dora-operator-api-c = { version = "0.3.5", path = "apis/c/operator" }
 dora-node-api-c = { version = "0.3.5", path = "apis/c/node" }
-dora-core = { version = "0.3.5", path = "libraries/core" }
+dora-core = { version = "0.3.5", path = "libraries/core", default-features = false }
 dora-arrow-convert = { version = "0.3.5", path = "libraries/arrow-convert" }
 dora-tracing = { version = "0.3.5", path = "libraries/extensions/telemetry/tracing" }
 dora-metrics = { version = "0.3.5", path = "libraries/extensions/telemetry/metrics" }
@@ -71,7 +71,11 @@ arrow = { version = "52" }
 arrow-schema = { version = "52" }
 arrow-data = { version = "52" }
 arrow-array = { version = "52" }
-pyo3 = { version = "0.21", features = ["eyre", "abi3-py37", "multiple-pymethods"] }
+pyo3 = { version = "0.21", features = [
+    "eyre",
+    "abi3-py37",
+    "multiple-pymethods",
+] }
 pythonize = "0.21"
 
 [package]

@@ -67,6 +67,7 @@ impl DaemonChannel {
     }
 
     pub fn request(&mut self, request: &Timestamped<DaemonRequest>) -> eyre::Result<DaemonReply> {
+        println!("[TRACE] DaemoChannel request {:?}", request);
         match self {
             #[cfg(feature = "shmem")]
             DaemonChannel::Shmem(client) => client.request(request),

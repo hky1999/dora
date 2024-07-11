@@ -6,7 +6,7 @@ use dora_core::{
         Timestamped,
     },
     message::uhlc,
-    topics::LOCALHOST,
+    topics::UNSPECIFIED,
 };
 use eyre::{eyre, Context};
 use futures::{future, task, Future};
@@ -39,7 +39,7 @@ pub async fn spawn_listener_loop(
 ) -> eyre::Result<DaemonCommunication> {
     match config {
         LocalCommunicationConfig::Tcp => {
-            let socket = match TcpListener::bind((LOCALHOST, 0)).await {
+            let socket = match TcpListener::bind((UNSPECIFIED, 0)).await {
                 Ok(socket) => socket,
                 Err(err) => {
                     return Err(
@@ -176,6 +176,8 @@ impl Listener {
             }
         };
 
+        println!("[TRACE] receive the first message {:?}", message);
+
         if let Err(err) = hlc.update_with_timestamp(&message.timestamp) {
             tracing::warn!("failed to update HLC: {err}");
         }
@@ -247,6 +249,7 @@ impl Listener {
     async fn run_inner<C: Connection>(&mut self, mut connection: C) -> eyre::Result<()> {
         loop {
             let mut next_message = connection.receive_message();
+
             let message = loop {
                 let next_event = self.next_event();
                 let event = match future::select(next_event, next_message).await {
@@ -260,6 +263,8 @@ impl Listener {
                 self.queue.push_back(Box::new(Some(event)));
                 self.handle_events().await?;
             };
+
+            println!("[TRACE] run_inner receive message {:?}", message);
 
             match message.wrap_err("failed to receive DaemonRequest") {
                 Ok(Some(message)) => {

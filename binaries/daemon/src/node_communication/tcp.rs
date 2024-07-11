@@ -85,8 +85,24 @@ impl Connection for TcpConnection {
             // don't send empty replies
             return Ok(());
         }
+
+        println!(
+            "[TRACE] daemon on {:?} send_reply() to {:?} msg {:?}",
+            self.0.local_addr(),
+            self.0.peer_addr(),
+            message
+        );
+
         let serialized =
             bincode::serialize(&message).wrap_err("failed to serialize DaemonReply")?;
+
+        println!(
+            "[TRACE] daemon on {:?} send_reply() to {:?} serialized {:x?}",
+            self.0.local_addr(),
+            self.0.peer_addr(),
+            serialized
+        );
+
         tcp_send(&mut self.0, &serialized)
             .await
             .wrap_err("failed to send DaemonReply")?;

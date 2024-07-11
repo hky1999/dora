@@ -25,6 +25,7 @@ impl DropStream {
         daemon_communication: &DaemonCommunication,
         hlc: Arc<uhlc::HLC>,
     ) -> eyre::Result<Self> {
+        println!("[TRACE] DropStream init {:#?}", daemon_communication);
         let channel = match daemon_communication {
             #[cfg(feature = "shmem")]
             DaemonCommunication::Shmem {

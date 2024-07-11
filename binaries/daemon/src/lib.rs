@@ -9,10 +9,10 @@ use dora_core::daemon_messages::{
 use dora_core::descriptor::runtime_node_inputs;
 use dora_core::message::uhlc::{self, HLC};
 use dora_core::message::{ArrowTypeInfo, Metadata, MetadataParameters};
-use dora_core::topics::LOCALHOST;
 use dora_core::topics::{
     DataflowDaemonResult, DataflowResult, NodeError, NodeErrorCause, NodeExitStatus,
 };
+use dora_core::topics::{LOCALHOST, UNSPECIFIED};
 use dora_core::{
     config::{DataId, InputMapping, NodeId},
     coordinator_messages::DaemonEvent,
@@ -128,7 +128,7 @@ impl Daemon {
         // Spawn local listener loop
         let (events_tx, events_rx) = flume::bounded(10);
         let _listen_port = local_listener::spawn_listener_loop(
-            (LOCALHOST, local_listen_port).into(),
+            (UNSPECIFIED, local_listen_port).into(),
             machine_id.clone(),
             events_tx,
         )

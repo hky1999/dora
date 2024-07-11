@@ -149,15 +149,30 @@ impl DoraNode {
             dora_core::daemon_messages::DaemonReply::NodeConfig {
                 result: Ok(mut node_config),
             } => {
+                println!(
+                    "[TRACE] get node_config from daemon, DaemonCommunication {:#?}",
+                    node_config.daemon_communication
+                );
+
                 // Replace the `socket_addr` in the `node_config` returned by daemon
                 // with the `remote_ip` of the machine where daemon is located.
                 // Todo: make it more elgant.
                 #[allow(unreachable_patterns)]
                 match node_config.daemon_communication {
                     DaemonCommunication::Tcp { socket_addr } => {
+                        println!(
+                            "[TRACE] DaemonCommunication::Tcp socket_addr {:?}",
+                            socket_addr,
+                        );
+
                         node_config.daemon_communication = DaemonCommunication::Tcp {
                             socket_addr: (remote_ip, socket_addr.port()).into(),
                         };
+
+                        println!(
+                            "[TRACE] DaemonCommunication modify to {:#?}",
+                            node_config.daemon_communication
+                        );
                     }
                     _ => {} // Do nothing if it's `Shmem`.
                 };
@@ -201,6 +216,8 @@ impl DoraNode {
         let control_channel =
             ControlChannel::init(dataflow_id, &node_id, &daemon_communication, clock.clone())
                 .wrap_err("failed to init control channel")?;
+
+        println!("[TRACE] all streams init success");
 
         let node = Self {
             id: node_id,
